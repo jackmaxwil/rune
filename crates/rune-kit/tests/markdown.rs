@@ -647,6 +647,22 @@ fn a_long_cell_wraps_inside_its_column_and_its_row_grows_to_fit() {
 }
 
 #[test]
+fn long_inline_code_wraps_inside_its_paragraph() {
+    fn narrow(src: &String, _: &mut Cx<String>) -> El {
+        col().w_full().child(col().w(300.0).child(Markdown::new(src.clone()).build(&Kit::neutral(true))))
+    }
+    let src = "Run `crates/rune-kit/src/markdown/render.rs::Renderer::para_with_a_very_long_name` now\n".to_owned();
+    let mut rt = Runtime::new(src, narrow, (480.0, 600.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    let para = by_key(&rt, "b0");
+    let window = rune::runtime::ElementInfo { rect: [0.0, 0.0, 480.0, 600.0], ..para.clone() };
+    let [_, right] = ink(&rt, &window);
+    assert!(right <= 300.0, "no glyph past the column: {right}");
+    let line = laid_out("Run `x` now\n");
+    assert!(para.rect[3] > 1.5 * by_key(&line, "b0").rect[3], "the code breaks onto a second line: {:?}", para.rect);
+}
+
+#[test]
 fn scroll_wide_keeps_a_wide_tables_cells_on_one_line_and_scrolls_it_sideways() {
     fn wide(src: &String, _: &mut Cx<String>) -> El {
         col().w_full().child(col().w(300.0).child(Markdown::new(src.clone()).scroll_wide(true).build(&Kit::neutral(true))))
