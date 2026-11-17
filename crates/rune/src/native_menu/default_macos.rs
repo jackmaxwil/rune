@@ -261,6 +261,8 @@ pub(crate) fn add_top(mtm: MainThreadMarker, root: &NSMenu, name: &str) -> (Reta
         let _: () = msg_send![&entry, setIdentifier: &*NSString::from_str(&format!("{NAMED}{name}"))];
         entry.setSubmenu(Some(&menu));
         root.insertItem_atIndex(&entry, super::standard::top_index(name, &tops) as isize);
+        // AppKit lists open windows only in the menu it was told is the Window menu.
+        if name == "Window" { NSApplication::sharedApplication(mtm).setWindowsMenu(Some(&menu)); }
         (entry, menu)
     }
 }

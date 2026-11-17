@@ -486,7 +486,8 @@ impl<S: 'static> Host<S> {
         let encoded = self.frame_reports.stamp();
         l.window.pre_present_notify();
         #[cfg(target_os = "macos")]
-        l.native.materials.present(&rt.materials, rt.env.scale, || gpu.queue.present(frame));
+        // Material rects are device pixels; native views are sized in window points, not zoomed ones.
+        l.native.materials.present(&rt.materials, rt.window_scale(), || gpu.queue.present(frame));
         #[cfg(target_os = "windows")]
         if let (Some(rects), Some(surface)) = (&present_rect, l.surface.as_ref())
             // SAFETY: only names the rectangles the next present changed.
