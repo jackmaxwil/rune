@@ -501,9 +501,10 @@ impl<S: 'static> Runtime<S> {
     /// Queues `on_screen_layout` for the elements that moved with it; true when it queued any,
     /// so the host draws a frame to deliver them. A window move is outside feedback, like a
     /// scroll, so it reopens layout feedback (see the module docs).
-    pub(crate) fn set_window_origin(&mut self, origin: (f32, f32)) -> bool {
+    pub fn set_window_origin(&mut self, origin: (f32, f32)) -> bool {
         if self.window_origin == origin { return false; }
         self.window_origin = origin;
+        self.titlebar.moved();
         self.feedback = self.feedback.step(FeedbackEvent::Reopened);
         self.report_rects(false, true)
     }

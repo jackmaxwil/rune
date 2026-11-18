@@ -93,6 +93,9 @@ pub(super) enum Event {
     SecondaryUp { region: bool },
     /// Pointer cancellation or stage replacement ends both halves of any pending press.
     Clear,
+    /// The window moved: a press that dragged it carried the pointer along, so the next press
+    /// lands on the same window point but elsewhere on screen, and is never its second.
+    Moved,
 }
 
 /// What a press asks the window for, in that press event: the shell starts a native drag inside
@@ -159,6 +162,10 @@ pub(super) fn step(state: &mut TitlebarPress, event: Event) -> Effects<Request> 
             *state = TitlebarPress::Rest;
             Effects::none()
         }
+        Event::Moved => {
+            *state = keep_secondary(state, None);
+            Effects::none()
+        }
     }
 }
 
@@ -177,6 +184,10 @@ impl Titlebar {
 
     pub(super) fn clear(&mut self) {
         self.act(Event::Clear);
+    }
+
+    pub(super) fn moved(&mut self) {
+        self.act(Event::Moved);
     }
 
     /// Steps the press and hands its request to the host, where the shell takes it in that press.

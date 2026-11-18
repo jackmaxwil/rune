@@ -356,6 +356,24 @@ fn presses_on_a_window_drag_region_move_the_window_but_not_its_buttons() {
 }
 
 #[test]
+fn a_press_after_dragging_the_window_drags_again_and_a_still_double_press_zooms() {
+    fn view(_: &(), _: &mut Cx<()>) -> El {
+        col().size(200.0, 200.0).child(crate::el::row().key("titlebar").size(200.0, 40.0).window_drag())
+    }
+    let mut rt = Runtime::new((), view, (200.0, 200.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    let press = |rt: &mut Runtime<()>| {
+        rt.pointer_down(100.0, 20.0);
+        rt.take_titlebar_action()
+    };
+    assert_eq!(press(&mut rt), Some(TitlebarAction::Drag));
+    // The window followed the pointer, so the next grab lands on the same window point.
+    rt.set_window_origin((440.0, 330.0));
+    assert_eq!(press(&mut rt), Some(TitlebarAction::Drag), "a second stroke, not a double click");
+    assert_eq!(press(&mut rt), Some(TitlebarAction::DoubleClick), "two presses in place zoom");
+}
+
+#[test]
 fn a_double_press_on_nothing_in_the_native_titlebar_band_takes_the_titlebar_action() {
     fn view(_: &(), _: &mut Cx<()>) -> El {
         col().size(200.0, 200.0).child(el().key("button").size(40.0, 40.0).on_press(|_: &mut ()| {}))
