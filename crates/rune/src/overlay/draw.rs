@@ -203,7 +203,7 @@ impl<T: 'static> Overlay<T> {
         #[cfg(target_os = "macos")]
         let frame = {
             let Backing::Window(window) = &live.backing;
-            if live.materials.update(self.rt.transparent, !self.rt.materials.is_empty(), window, &live.surface) {
+            if live.materials.update(self.rt.transparent, &self.rt.materials, self.rt.env.scale, window, &live.surface) {
                 // This drawable presents without the views: build again natively into a new one,
                 // so prewarm and reveal show the material from this frame.
                 drop(frame);

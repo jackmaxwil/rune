@@ -115,6 +115,29 @@ impl PresentFlag {
     }
 }
 
+/// Whether a frame's material views present in the drawable's transaction. A view that moves
+/// must land with the content drawn over it; one that rests gains nothing from it, and a layer
+/// that presents with transactions waits on the window server for every drawable (measured on a
+/// 120 Hz panel: a third of the frames late under a resting full-window material). So frames
+/// sync while a view moves and for [`SyncGate::QUIET`] frames after, which keeps a stepped
+/// animation from switching the layer back and forth.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct SyncGate {
+    quiet: u8,
+}
+
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+impl SyncGate {
+    pub(crate) const QUIET: u8 = 8;
+
+    /// Whether this frame syncs, given whether its views already show what it draws.
+    pub(crate) fn frame(&mut self, settled: bool) -> bool {
+        self.quiet = if settled { self.quiet.saturating_add(1) } else { 0 };
+        self.quiet <= Self::QUIET
+    }
+}
+
 /// One corner radius for a rect: native materials take a single radius, so this uses the
 /// largest corner, clamped to half the shorter side as Rune's own rounded rects are.
 pub(crate) fn clamp_radius(radii: [f32; 4], width: f32, height: f32) -> f32 {

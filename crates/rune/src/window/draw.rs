@@ -336,7 +336,7 @@ impl<S: 'static> Host<S> {
             return self.missed_frame(Missed::Timeout, true);
         }
         #[cfg(target_os = "macos")]
-        let frame = if l.surface.as_ref().is_some_and(|surface| l.native.materials.update(rt.transparent, !rt.materials.is_empty(), &l.window, surface)) {
+        let frame = if l.surface.as_ref().is_some_and(|surface| l.native.materials.update(rt.transparent, &rt.materials, rt.window_scale(), &l.window, surface)) {
             // This drawable presents without the views: build again natively into a new one.
             drop(frame);
             rt.native_materials = true;

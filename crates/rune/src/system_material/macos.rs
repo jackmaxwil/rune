@@ -8,7 +8,7 @@
 //! frame, corner radius and alpha inside it, so the WindowServer composites the material, the
 //! shadow around it and the content on top from the same commit.
 
-use super::{assign, MaterialDraw, Mode, PresentFlag, SystemMaterial, MAX_NATIVE_MATERIALS};
+use super::{assign, MaterialDraw, Mode, PresentFlag, SyncGate, SystemMaterial, MAX_NATIVE_MATERIALS};
 use rune_motion::NodeId;
 use objc2_core_foundation::{CGPoint, CGRect, CGSize};
 use objc2_video::rc::Retained;
@@ -66,11 +66,17 @@ pub(crate) struct Materials {
     flag: Rc<Cell<PresentFlag>>,
     live_end: Option<Retained<AnyObject>>,
     slots: Vec<Slot>,
+    gate: SyncGate,
+    /// What the views were last set to show, in draw order: a frame that draws the same moves none.
+    last: Vec<Shown>,
 }
+
+/// One draw as its view shows it: the element, its material, frame, radius, curve and alpha.
+type Shown = (NodeId, SystemMaterial, [f64; 4], f64, bool, f64);
 
 impl Materials {
     pub(crate) fn new() -> Self {
-        Materials { mode: Mode::from_env(), active: false, view: None, host: None, metal: None, flag: Rc::default(), live_end: None, slots: Vec::new() }
+        Materials { mode: Mode::from_env(), active: false, view: None, host: None, metal: None, flag: Rc::default(), live_end: None, slots: Vec::new(), gate: SyncGate::default(), last: Vec::new() }
     }
 
     /// Whether this frame's elements should leave their interior to native views.
@@ -112,7 +118,17 @@ impl Materials {
     /// elements, and off when it found none. True when it switched them on, so the caller
     /// drops this frame's drawable, builds again natively and acquires another: wgpu reads
     /// `presentsWithTransaction` when it acquires a drawable, and this one is already out.
-    pub(crate) fn update(&mut self, transparent: bool, found: bool, window: &winit::window::Window, surface: &wgpu::Surface<'_>) -> bool {
+    pub(crate) fn update(&mut self, transparent: bool, draws: &[MaterialDraw], scale: f32, window: &winit::window::Window, surface: &wgpu::Surface<'_>) -> bool {
+        let found = !draws.is_empty();
+        if self.active && found && self.mode != Mode::Unsynced {
+            // True when a view starts to move under a layer that presented plainly: this
+            // drawable is already out without a transaction, so the caller takes another.
+            let sync = self.gate.frame(self.shows(draws, scale));
+            return match self.update_flag(|f| f.materials(sync)) {
+                Some(on) => { crate::platform::macos::present_with_transaction(surface, on); on }
+                None => false,
+            };
+        }
         if self.active && !found {
             // `present` hides the views in this frame's transaction; they stay for the next activation.
             self.active = false;
@@ -130,6 +146,7 @@ impl Materials {
         self.view = Some(view);
         self.metal = Some(metal);
         self.active = true;
+        self.gate = SyncGate::default();
         true
     }
 
@@ -138,6 +155,7 @@ impl Materials {
     pub(crate) fn present(&mut self, draws: &[MaterialDraw], scale: f32, present: impl FnOnce()) {
         if !self.active && self.slots.iter().all(|s| s.shown.is_none()) { return present(); }
         let draws = if self.active { draws } else { &[] };
+        if !self.flag.get().written() && self.shows(draws, scale) { return present(); }
         let transaction = AnyClass::get(c"CATransaction");
         let synced = self.mode != Mode::Unsynced && transaction.is_some();
         if let Some(t) = transaction {
@@ -156,10 +174,25 @@ impl Materials {
         }
     }
 
+    fn shown(&self, draws: &[MaterialDraw], scale: f32) -> Vec<Shown> {
+        let draws = &draws[..draws.len().min(MAX_NATIVE_MATERIALS)];
+        draws.iter().map(|d| {
+            let (frame, radius) = d.points(scale);
+            (d.id, self.mode.resolve(d.material), frame, radius, d.continuous, f64::from(d.opacity.clamp(0.0, 1.0)))
+        }).collect()
+    }
+
+    /// Whether the views already show `draws`, so `sync` would move none.
+    fn shows(&self, draws: &[MaterialDraw], scale: f32) -> bool {
+        self.shown(draws, scale) == self.last
+    }
+
     fn sync(&mut self, draws: &[MaterialDraw], scale: f32) {
+        let shown = self.shown(draws, scale);
         let draws = &draws[..draws.len().min(MAX_NATIVE_MATERIALS)];
         if draws.is_empty() && self.slots.iter().all(|s| s.shown.is_none()) { return; }
         let Some(host) = self.host() else { return };
+        self.last = shown;
         let mode = self.mode;
         let wanted: Vec<_> = draws.iter().map(|d| (mode.resolve(d.material), d.id)).collect();
         let views: Vec<_> = self.slots.iter().map(|s| (s.material, s.owner)).collect();

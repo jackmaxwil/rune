@@ -309,3 +309,15 @@ fn srgb_blend_frost_over_a_native_material_reads_as_core_animation() {
     near(read(true, 1, [0.0; 4]), [158, 158, 158, 158]);
     near(read(true, 0, [0.0; 4]), [0, 0, 0, 0]);
 }
+
+#[test]
+fn frames_sync_while_a_view_moves_and_for_a_few_after() {
+    let mut gate = SyncGate::default();
+    assert!(gate.frame(false), "a view that moves lands with the drawable");
+    for frame in 0..SyncGate::QUIET {
+        assert!(gate.frame(true), "resting frame {frame} still syncs: a stepped move must not flip the layer");
+    }
+    assert!(!gate.frame(true), "a view at rest presents plainly");
+    assert!(!gate.frame(true));
+    assert!(gate.frame(false), "the next move syncs again");
+}
